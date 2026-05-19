@@ -1,0 +1,72 @@
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import plotly.express as px
+from datetime import datetime
+
+st.set_page_config(page_title="SafeInvest Pro", layout="wide")
+st.title("🚀 SafeInvest Pro")
+st.markdown("**Análisis de Acciones y ETFs - Datos en tiempo real**")
+
+st.caption("🔒 Herramienta educativa - Solo análisis público. No es asesoramiento financiero.")
+
+# Sidebar
+st.sidebar.header("Filtros")
+strategy = st.sidebar.selectbox("Estrategia", ["Combinada Recomendada", "Value + Calidad", "Momentum Seguro"])
+
+# Lista de activos
+tickers = ["SPY","VOO","SCHD","AAPL","MSFT","GOOGL","AMZN","NVDA","JPM","V","JNJ","PG","XOM","KO"]
+
+@st.cache_data(ttl=600)
+def get_data(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        hist = stock.history(period="1y")
+        return info, hist
+    except:
+        return None, None
+
+data = []
+for tick in tickers:
+    info, hist = get_data(tick)
+    if info is None or hist.empty:
+        continue
+        
+    price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
+    mom_6m = (hist['Close'].iloc[-1] / hist['Close'].iloc[-126] - 1) * 100 if len(hist) > 126 else 0
+    pe = info.get("trailingPE") or info.get("forwardPE", 999)
+    div = (info.get("dividendYield") or 0) * 100
+    
+    signal = "MANTENER"
+    if mom_6m > 10 and pe < 30 and div > 1:
+        signal = "🟢 COMPRAR"
+    elif mom_6m < -10:
+        signal = "🔴 VENDER"
+    
+    data.append({
+        "Ticker": tick,
+        "Precio": round(price, 2),
+        "Momentum 6M (%)": round(mom_6m, 1),
+        "P/E": round(pe, 2),
+        "Div Yield (%)": round(div, 2),
+        "Señal": signal
+    })
+
+df = pd.DataFrame(data)
+
+# Resumen de Mercado
+st.header("📈 Resumen del Mercado")
+col1, col2 = st.columns(2)
+with col1:
+    spy = yf.Ticker("SPY")
+    spy_price = spy.info.get("currentPrice") or spy.info.get("regularMarketPrice", 0)
+    st.metric("S&P 500 (SPY)", f"${spy_price:.2f}")
+
+# Recomendaciones
+st.header("🟢 Recomendaciones Actuales")
+st.dataframe(df.sort_values("Señal", ascending=False), use_container_width=True, height=600)
+
+st.success("**Consejo:** Usa esto solo como referencia. Siempre investiga por tu cuenta antes de invertir.")
+
+st.caption("Datos obtenidos de Yahoo Finance • Actualizado cada 10 minutos • Versión más estable")
